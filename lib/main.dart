@@ -260,8 +260,8 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
                     ),
                     child: ClipRect(
                       child: SizedBox(
-                        width: 30,
-                        height: 47,
+                        width: 48,
+                        height: 75,
                         child: Transform.translate(
                           offset: Offset(
                             -48.0 * _animationFrame,
@@ -269,8 +269,10 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
                           ),
                           child: Image.asset(
                             'assets/pipistale_walk_sheet.png',
-                            width: 48.0 * 4,
-                            height: 75.0 * 4,
+                            width: 192,
+                            height: 300,
+                            fit: BoxFit.none,
+                            alignment: Alignment.topLeft,
                             filterQuality: FilterQuality.none,
                             isAntiAlias: false,
                           ),
