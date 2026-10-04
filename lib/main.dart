@@ -227,6 +227,20 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
                       painter: _RoomPainter(player: _player),
                     ),
                   ),
+                  Align(
+                    alignment: Alignment(
+                      -1 + 2 * (0.06 + 0.88 * _player.dx),
+                      -1 + 2 * (0.10 + 0.80 * _player.dy),
+                    ),
+                    child: SizedBox(
+                      width: 29,
+                      height: 42,
+                      child: Image.asset(
+                        'assets/pipistale_player.png',
+                        filterQuality: FilterQuality.none,
+                      ),
+                    ),
+                  ),
                   if (!_showControlChoice)
                     Positioned.fill(
                       child: _controlMode == ControlMode.arrows
@@ -541,16 +555,6 @@ class _RoomPainter extends CustomPainter {
     final playerPosition = Offset(
       room.left + room.width * player.dx,
       room.top + room.height * player.dy,
-    );
-
-    final playerPaint = Paint()..color = Colors.white;
-    canvas.drawRect(
-      Rect.fromCenter(
-        center: playerPosition,
-        width: 22,
-        height: 22,
-      ),
-      playerPaint,
     );
 
     final textPainter = TextPainter(
