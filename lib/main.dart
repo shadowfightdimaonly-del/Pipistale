@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -38,23 +39,91 @@ class PrototypeScreen extends StatefulWidget {
 
 class _PrototypeScreenState extends State<PrototypeScreen> {
   static const _controlKey = 'control_mode';
+  static const _movementInterval = Duration(milliseconds: 16);
 
   final FocusNode _focusNode = FocusNode();
+  Timer? _movementTimer;
+
   Offset _player = const Offset(0.5, 0.5);
   ControlMode _controlMode = ControlMode.arrows;
   bool _showControlChoice = true;
-  Offset? _joystickVector;
+  Offset _heldDirection = Offset.zero;
+  Offset _joystickVector = Offset.zero;
 
-  static const double _speed = 0.018;
+  // Roughly normal Undertale-like walking speed.
+  // Movement is applied by a fixed 60-ish FPS timer, not by gesture frequency.
+  static const double _speedPerSecond = 0.24;
 
   @override
   void initState() {
     super.initState();
     _loadControlMode();
+    _movementTimer = Timer.periodic(_movementInterval, (_) {
+      _tickMovement();
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
     });
   }
+
+  void _tickMovement() {
+    final direction = _heldDirection;
+    if (direction == Offset.zero || !mounted) return;
+
+    final length = direction.distance;
+    final normalized = length > 1 ? direction / length : direction;
+    final delta = _speedPerSecond * (_movementInterval.inMicroseconds / 1000000);
+    final next = Offset(
+      (_player.dx + normalized.dx * delta).clamp(0.06, 0.94),
+      (_player.dy + normalized.dy * delta).clamp(0.10, 0.90),
+    );
+
+    if (next != _player) {
+      setState(() => _player = next);
+    }
+  }
+
+  void _setHeldDirection(Offset direction) {
+    if (direction == Offset.zero) {
+      _heldDirection = Offset.zero;
+      return;
+    }
+
+    final length = direction.distance;
+    _heldDirection = length > 1 ? direction / length : direction;
+  }
+
+  void _startButtonMovement(Offset direction) {
+    _setHeldDirection(direction);
+  }
+
+  void _stopButtonMovement() {
+    if (_controlMode == ControlMode.arrows) {
+      _setHeldDirection(Offset.zero);
+    }
+  }
+
+  void _moveKeyboard(LogicalKeyboardKey key, bool pressed) {
+    final current = _keyboardDirections[key] ?? Offset.zero;
+    if (current == Offset.zero) return;
+
+    if (pressed) {
+      _setHeldDirection(current);
+    } else if (_heldDirection == current) {
+      _setHeldDirection(Offset.zero);
+    }
+  }
+
+  static const Map<LogicalKeyboardKey, Offset> _keyboardDirections = {
+    LogicalKeyboardKey.arrowLeft: Offset(-1, 0),
+    LogicalKeyboardKey.keyA: Offset(-1, 0),
+    LogicalKeyboardKey.arrowRight: Offset(1, 0),
+    LogicalKeyboardKey.keyD: Offset(1, 0),
+    LogicalKeyboardKey.arrowUp: Offset(0, -1),
+    LogicalKeyboardKey.keyW: Offset(0, -1),
+    LogicalKeyboardKey.arrowDown: Offset(0, 1),
+    LogicalKeyboardKey.keyS: Offset(0, 1),
+  };
 
   Future<void> _loadControlMode() async {
     final prefs = await SharedPreferences.getInstance();
@@ -77,41 +146,13 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
       _controlKey,
       mode == ControlMode.joystick ? 'joystick' : 'arrows',
     );
+    _setHeldDirection(Offset.zero);
+    _joystickVector = Offset.zero;
     if (!mounted) return;
     setState(() {
       _controlMode = mode;
       _showControlChoice = false;
     });
-  }
-
-  void _moveVector(Offset direction, [double multiplier = 1.0]) {
-    if (direction == Offset.zero) return;
-    final length = direction.distance;
-    final normalized = length > 1 ? direction / length : direction;
-    final next = Offset(
-      (_player.dx + normalized.dx * _speed * multiplier).clamp(0.06, 0.94),
-      (_player.dy + normalized.dy * _speed * multiplier).clamp(0.10, 0.90),
-    );
-    if (next != _player) {
-      setState(() => _player = next);
-    }
-  }
-
-  void _moveKeyboard(LogicalKeyboardKey key) {
-    var direction = Offset.zero;
-    if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.keyA) {
-      direction = const Offset(-1, 0);
-    } else if (key == LogicalKeyboardKey.arrowRight ||
-        key == LogicalKeyboardKey.keyD) {
-      direction = const Offset(1, 0);
-    } else if (key == LogicalKeyboardKey.arrowUp ||
-        key == LogicalKeyboardKey.keyW) {
-      direction = const Offset(0, -1);
-    } else if (key == LogicalKeyboardKey.arrowDown ||
-        key == LogicalKeyboardKey.keyS) {
-      direction = const Offset(0, 1);
-    }
-    _moveVector(direction);
   }
 
   void _showControls() {
@@ -154,6 +195,7 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
 
   @override
   void dispose() {
+    _movementTimer?.cancel();
     _focusNode.dispose();
     super.dispose();
   }
@@ -170,8 +212,10 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
               focusNode: _focusNode,
               autofocus: true,
               onKeyEvent: (node, event) {
-                if (event is KeyDownEvent) {
-                  _moveKeyboard(event.logicalKey);
+                final isDown = event is KeyDownEvent;
+                final isUp = event is KeyUpEvent;
+                if (isDown || isUp) {
+                  _moveKeyboard(event.logicalKey, isDown);
                   return KeyEventResult.handled;
                 }
                 return KeyEventResult.ignored;
@@ -186,13 +230,19 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
                   if (!_showControlChoice)
                     Positioned.fill(
                       child: _controlMode == ControlMode.arrows
-                          ? _ArrowControls(onMove: _moveVector)
+                          ? _ArrowControls(
+                              onMoveStart: _startButtonMovement,
+                              onMoveEnd: _stopButtonMovement,
+                            )
                           : _JoystickControl(
                               onChanged: (vector) {
                                 _joystickVector = vector;
-                                _moveVector(vector, vector.distance);
+                                _setHeldDirection(vector);
                               },
-                              onReleased: () => _joystickVector = null,
+                              onReleased: () {
+                                _joystickVector = Offset.zero;
+                                _setHeldDirection(Offset.zero);
+                              },
                             ),
                     ),
                   Positioned(
@@ -301,9 +351,13 @@ class _ControlChoiceButton extends StatelessWidget {
 }
 
 class _ArrowControls extends StatelessWidget {
-  const _ArrowControls({required this.onMove});
+  const _ArrowControls({
+    required this.onMoveStart,
+    required this.onMoveEnd,
+  });
 
-  final void Function(Offset) onMove;
+  final void Function(Offset) onMoveStart;
+  final VoidCallback onMoveEnd;
 
   @override
   Widget build(BuildContext context) {
@@ -316,14 +370,14 @@ class _ArrowControls extends StatelessWidget {
           height: 150,
           child: Stack(
             children: [
-              _ArrowButton(left: 70, top: 0, icon: Icons.keyboard_arrow_up, direction: const Offset(0, -1), onMove: onMove),
-              _ArrowButton(left: 0, top: 52, icon: Icons.keyboard_arrow_left, direction: const Offset(-1, 0), onMove: onMove),
-              _ArrowButton(left: 70, top: 52, icon: Icons.keyboard_arrow_down, direction: const Offset(0, 1), onMove: onMove),
-              _ArrowButton(left: 140, top: 52, icon: Icons.keyboard_arrow_right, direction: const Offset(1, 0), onMove: onMove),
-              _ArrowButton(left: 18, top: 104, icon: Icons.keyboard_arrow_down, direction: const Offset(-1, 1), onMove: onMove),
-              _ArrowButton(left: 122, top: 104, icon: Icons.keyboard_arrow_down, direction: const Offset(1, 1), onMove: onMove),
-              _ArrowButton(left: 18, top: 0, icon: Icons.keyboard_arrow_up, direction: const Offset(-1, -1), onMove: onMove),
-              _ArrowButton(left: 122, top: 0, icon: Icons.keyboard_arrow_up, direction: const Offset(1, -1), onMove: onMove),
+              _ArrowButton(left: 70, top: 0, icon: Icons.keyboard_arrow_up, direction: const Offset(0, -1), onMoveStart: onMoveStart, onMoveEnd: onMoveEnd),
+              _ArrowButton(left: 0, top: 52, icon: Icons.keyboard_arrow_left, direction: const Offset(-1, 0), onMoveStart: onMoveStart, onMoveEnd: onMoveEnd),
+              _ArrowButton(left: 70, top: 52, icon: Icons.keyboard_arrow_down, direction: const Offset(0, 1), onMoveStart: onMoveStart, onMoveEnd: onMoveEnd),
+              _ArrowButton(left: 140, top: 52, icon: Icons.keyboard_arrow_right, direction: const Offset(1, 0), onMoveStart: onMoveStart, onMoveEnd: onMoveEnd),
+              _ArrowButton(left: 18, top: 104, icon: Icons.keyboard_arrow_down, direction: const Offset(-1, 1), onMoveStart: onMoveStart, onMoveEnd: onMoveEnd),
+              _ArrowButton(left: 122, top: 104, icon: Icons.keyboard_arrow_down, direction: const Offset(1, 1), onMoveStart: onMoveStart, onMoveEnd: onMoveEnd),
+              _ArrowButton(left: 18, top: 0, icon: Icons.keyboard_arrow_up, direction: const Offset(-1, -1), onMoveStart: onMoveStart, onMoveEnd: onMoveEnd),
+              _ArrowButton(left: 122, top: 0, icon: Icons.keyboard_arrow_up, direction: const Offset(1, -1), onMoveStart: onMoveStart, onMoveEnd: onMoveEnd),
             ],
           ),
         ),
@@ -338,14 +392,16 @@ class _ArrowButton extends StatelessWidget {
     required this.top,
     required this.icon,
     required this.direction,
-    required this.onMove,
+    required this.onMoveStart,
+    required this.onMoveEnd,
   });
 
   final double left;
   final double top;
   final IconData icon;
   final Offset direction;
-  final void Function(Offset) onMove;
+  final void Function(Offset) onMoveStart;
+  final VoidCallback onMoveEnd;
 
   @override
   Widget build(BuildContext context) {
@@ -355,9 +411,9 @@ class _ArrowButton extends StatelessWidget {
       width: 50,
       height: 50,
       child: GestureDetector(
-        onTap: () => onMove(direction),
-        onLongPress: () => onMove(direction),
-        onLongPressMoveUpdate: (_) => onMove(direction),
+        onTap: () => onMoveStart(direction),
+        onLongPressStart: (_) => onMoveStart(direction),
+        onLongPressEnd: (_) => onMoveEnd(),
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.14),
@@ -413,6 +469,10 @@ class _JoystickControlState extends State<_JoystickControl> {
             _update(details.localPosition, const Size(170, 170));
           },
           onPanEnd: (_) {
+            setState(() => _knob = Offset.zero);
+            widget.onReleased();
+          },
+          onPanCancel: () {
             setState(() => _knob = Offset.zero);
             widget.onReleased();
           },
