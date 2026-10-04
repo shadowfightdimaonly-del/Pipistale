@@ -1,10 +1,19 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  runApp(const PipistaleApp());
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setPreferredOrientations(const [
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ]).then((_) {
+    runApp(const PipistaleApp());
+  });
 }
+
+enum ControlMode { arrows, joystick }
 
 class PipistaleApp extends StatelessWidget {
   const PipistaleApp({super.key});
@@ -28,43 +37,125 @@ class PrototypeScreen extends StatefulWidget {
 }
 
 class _PrototypeScreenState extends State<PrototypeScreen> {
+  static const _controlKey = 'control_mode';
+
   final FocusNode _focusNode = FocusNode();
   Offset _player = const Offset(0.5, 0.5);
+  ControlMode _controlMode = ControlMode.arrows;
+  bool _showControlChoice = true;
+  Offset? _joystickVector;
 
-  static const double _playerSize = 22;
   static const double _speed = 0.018;
 
   @override
   void initState() {
     super.initState();
+    _loadControlMode();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
     });
+  }
+
+  Future<void> _loadControlMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_controlKey);
+    if (!mounted) return;
+    setState(() {
+      if (saved == 'joystick') {
+        _controlMode = ControlMode.joystick;
+        _showControlChoice = false;
+      } else if (saved == 'arrows') {
+        _controlMode = ControlMode.arrows;
+        _showControlChoice = false;
+      }
+    });
+  }
+
+  Future<void> _setControlMode(ControlMode mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _controlKey,
+      mode == ControlMode.joystick ? 'joystick' : 'arrows',
+    );
+    if (!mounted) return;
+    setState(() {
+      _controlMode = mode;
+      _showControlChoice = false;
+    });
+  }
+
+  void _moveVector(Offset direction, [double multiplier = 1.0]) {
+    if (direction == Offset.zero) return;
+    final length = direction.distance;
+    final normalized = length > 1 ? direction / length : direction;
+    final next = Offset(
+      (_player.dx + normalized.dx * _speed * multiplier).clamp(0.06, 0.94),
+      (_player.dy + normalized.dy * _speed * multiplier).clamp(0.10, 0.90),
+    );
+    if (next != _player) {
+      setState(() => _player = next);
+    }
+  }
+
+  void _moveKeyboard(LogicalKeyboardKey key) {
+    var direction = Offset.zero;
+    if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.keyA) {
+      direction = const Offset(-1, 0);
+    } else if (key == LogicalKeyboardKey.arrowRight ||
+        key == LogicalKeyboardKey.keyD) {
+      direction = const Offset(1, 0);
+    } else if (key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.keyW) {
+      direction = const Offset(0, -1);
+    } else if (key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.keyS) {
+      direction = const Offset(0, 1);
+    }
+    _moveVector(direction);
+  }
+
+  void _showControls() {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Управление'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RadioListTile<ControlMode>(
+              value: ControlMode.arrows,
+              groupValue: _controlMode,
+              title: const Text('Стрелочки'),
+              subtitle: const Text('8 направлений'),
+              onChanged: (value) {
+                if (value != null) {
+                  _setControlMode(value);
+                  Navigator.pop(context);
+                }
+              },
+            ),
+            RadioListTile<ControlMode>(
+              value: ControlMode.joystick,
+              groupValue: _controlMode,
+              title: const Text('Джойстик'),
+              subtitle: const Text('Круговое управление'),
+              onChanged: (value) {
+                if (value != null) {
+                  _setControlMode(value);
+                  Navigator.pop(context);
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   void dispose() {
     _focusNode.dispose();
     super.dispose();
-  }
-
-  void _move(LogicalKeyboardKey key) {
-    var dx = 0.0;
-    var dy = 0.0;
-
-    if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.keyA) dx = -_speed;
-    if (key == LogicalKeyboardKey.arrowRight || key == LogicalKeyboardKey.keyD) dx = _speed;
-    if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.keyW) dy = -_speed;
-    if (key == LogicalKeyboardKey.arrowDown || key == LogicalKeyboardKey.keyS) dy = _speed;
-
-    final next = Offset(
-      (_player.dx + dx).clamp(0.06, 0.94),
-      (_player.dy + dy).clamp(0.10, 0.90),
-    );
-
-    if (next != _player) {
-      setState(() => _player = next);
-    }
   }
 
   @override
@@ -80,20 +171,287 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
               autofocus: true,
               onKeyEvent: (node, event) {
                 if (event is KeyDownEvent) {
-                  _move(event.logicalKey);
+                  _moveKeyboard(event.logicalKey);
                   return KeyEventResult.handled;
                 }
                 return KeyEventResult.ignored;
               },
-              child: CustomPaint(
-                painter: _RoomPainter(player: _player),
-                child: const SizedBox.expand(),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: _RoomPainter(player: _player),
+                    ),
+                  ),
+                  if (!_showControlChoice)
+                    Positioned.fill(
+                      child: _controlMode == ControlMode.arrows
+                          ? _ArrowControls(onMove: _moveVector)
+                          : _JoystickControl(
+                              onChanged: (vector) {
+                                _joystickVector = vector;
+                                _moveVector(vector, vector.distance);
+                              },
+                              onReleased: () => _joystickVector = null,
+                            ),
+                    ),
+                  Positioned(
+                    right: 12,
+                    top: 12,
+                    child: IconButton(
+                      tooltip: 'Управление',
+                      onPressed: _showControls,
+                      icon: const Icon(Icons.gamepad_outlined),
+                    ),
+                  ),
+                  if (_showControlChoice)
+                    Positioned.fill(
+                      child: Container(
+                        color: Colors.black.withOpacity(0.86),
+                        child: Center(
+                          child: Card(
+                            color: const Color(0xFF151515),
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text(
+                                    'Как управлять?',
+                                    style: TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 18),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _ControlChoiceButton(
+                                        icon: Icons.control_camera_outlined,
+                                        title: 'Стрелочки',
+                                        subtitle: '8 направлений',
+                                        onPressed: () => _setControlMode(
+                                          ControlMode.arrows,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      _ControlChoiceButton(
+                                        icon: Icons.gamepad_outlined,
+                                        title: 'Джойстик',
+                                        subtitle: 'Круговое управление',
+                                        onPressed: () => _setControlMode(
+                                          ControlMode.joystick,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
         ),
       ),
     );
+  }
+}
+
+class _ControlChoiceButton extends StatelessWidget {
+  const _ControlChoiceButton({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 150,
+      height: 120,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 34),
+            const SizedBox(height: 8),
+            Text(title),
+            Text(
+              subtitle,
+              style: const TextStyle(fontSize: 11, color: Colors.white60),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ArrowControls extends StatelessWidget {
+  const _ArrowControls({required this.onMove});
+
+  final void Function(Offset) onMove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.bottomLeft,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(22, 0, 0, 22),
+        child: SizedBox(
+          width: 190,
+          height: 150,
+          child: Stack(
+            children: [
+              _ArrowButton(left: 70, top: 0, icon: Icons.keyboard_arrow_up, direction: const Offset(0, -1), onMove: onMove),
+              _ArrowButton(left: 0, top: 52, icon: Icons.keyboard_arrow_left, direction: const Offset(-1, 0), onMove: onMove),
+              _ArrowButton(left: 70, top: 52, icon: Icons.keyboard_arrow_down, direction: const Offset(0, 1), onMove: onMove),
+              _ArrowButton(left: 140, top: 52, icon: Icons.keyboard_arrow_right, direction: const Offset(1, 0), onMove: onMove),
+              _ArrowButton(left: 18, top: 104, icon: Icons.keyboard_arrow_down, direction: const Offset(-1, 1), onMove: onMove),
+              _ArrowButton(left: 122, top: 104, icon: Icons.keyboard_arrow_down, direction: const Offset(1, 1), onMove: onMove),
+              _ArrowButton(left: 18, top: 0, icon: Icons.keyboard_arrow_up, direction: const Offset(-1, -1), onMove: onMove),
+              _ArrowButton(left: 122, top: 0, icon: Icons.keyboard_arrow_up, direction: const Offset(1, -1), onMove: onMove),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ArrowButton extends StatelessWidget {
+  const _ArrowButton({
+    required this.left,
+    required this.top,
+    required this.icon,
+    required this.direction,
+    required this.onMove,
+  });
+
+  final double left;
+  final double top;
+  final IconData icon;
+  final Offset direction;
+  final void Function(Offset) onMove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: left,
+      top: top,
+      width: 50,
+      height: 50,
+      child: GestureDetector(
+        onTap: () => onMove(direction),
+        onLongPress: () => onMove(direction),
+        onLongPressMoveUpdate: (_) => onMove(direction),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.14),
+            border: Border.all(color: Colors.white24),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: Colors.white70),
+        ),
+      ),
+    );
+  }
+}
+
+class _JoystickControl extends StatefulWidget {
+  const _JoystickControl({
+    required this.onChanged,
+    required this.onReleased,
+  });
+
+  final void Function(Offset) onChanged;
+  final VoidCallback onReleased;
+
+  @override
+  State<_JoystickControl> createState() => _JoystickControlState();
+}
+
+class _JoystickControlState extends State<_JoystickControl> {
+  Offset _knob = Offset.zero;
+
+  void _update(Offset local, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    var delta = local - center;
+    final maxRadius = size.width / 2 - 24;
+    if (delta.distance > maxRadius) {
+      delta = Offset.fromDirection(delta.direction, maxRadius);
+    }
+    final normalized = maxRadius == 0 ? Offset.zero : delta / maxRadius;
+    setState(() => _knob = delta);
+    widget.onChanged(normalized);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.bottomLeft,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 28, bottom: 28),
+        child: GestureDetector(
+          onPanStart: (details) {
+            _update(details.localPosition, const Size(170, 170));
+          },
+          onPanUpdate: (details) {
+            _update(details.localPosition, const Size(170, 170));
+          },
+          onPanEnd: (_) {
+            setState(() => _knob = Offset.zero);
+            widget.onReleased();
+          },
+          child: SizedBox(
+            width: 170,
+            height: 170,
+            child: CustomPaint(
+              painter: _JoystickPainter(knob: _knob),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _JoystickPainter extends CustomPainter {
+  const _JoystickPainter({required this.knob});
+
+  final Offset knob;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final base = Paint()..color = Colors.white.withOpacity(0.14);
+    final outline = Paint()
+      ..color = Colors.white24
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    final knobPaint = Paint()..color = Colors.white.withOpacity(0.5);
+
+    canvas.drawCircle(center, size.width / 2 - 4, base);
+    canvas.drawCircle(center, size.width / 2 - 4, outline);
+    canvas.drawCircle(center + knob, 32, knobPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _JoystickPainter oldDelegate) {
+    return oldDelegate.knob != knob;
   }
 }
 
@@ -129,15 +487,15 @@ class _RoomPainter extends CustomPainter {
     canvas.drawRect(
       Rect.fromCenter(
         center: playerPosition,
-        width: _PrototypeScreenState._playerSize,
-        height: _PrototypeScreenState._playerSize,
+        width: 22,
+        height: 22,
       ),
       playerPaint,
     );
 
     final textPainter = TextPainter(
       text: const TextSpan(
-        text: 'WASD / стрелки  •  Первый прототип комнаты',
+        text: 'Pipistale • прототип комнаты',
         style: TextStyle(
           color: Colors.white54,
           fontSize: 12,
