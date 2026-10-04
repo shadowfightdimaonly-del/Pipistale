@@ -258,28 +258,21 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
                       -1 + 2 * (0.06 + 0.88 * _player.dx),
                       -1 + 2 * (0.10 + 0.80 * _player.dy),
                     ),
-                    child: ClipRect(
-                      child: SizedBox(
-                        width: 48,
-                        height: 75,
-                        child: OverflowBox(
-                          minWidth: 192,
-                          maxWidth: 192,
-                          minHeight: 300,
-                          maxHeight: 300,
-                          alignment: Alignment.topLeft,
-                          child: Transform.translate(
-                            offset: Offset(
-                              -48.0 * _animationFrame,
-                              -75.0 * _facingRow,
-                            ),
-                            child: Image.asset(
-                              'assets/pipistale_walk_sheet.png',
-                              width: 192,
-                              height: 300,
-                              filterQuality: FilterQuality.none,
-                              isAntiAlias: false,
-                            ),
+                    child: SizedBox(
+                      width: 48,
+                      height: 75,
+                      child: ClipRect(
+                        child: Align(
+                          alignment: Alignment(
+                            -1.0 + (2.0 * _animationFrame / 3.0),
+                            -1.0 + (2.0 * _facingRow / 3.0),
+                          ),
+                          child: Image.asset(
+                            'assets/pipistale_walk_sheet.png',
+                            width: 192,
+                            height: 300,
+                            filterQuality: FilterQuality.none,
+                            isAntiAlias: false,
                           ),
                         ),
                       ),
