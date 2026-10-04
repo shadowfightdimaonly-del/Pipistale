@@ -43,12 +43,15 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
 
   final FocusNode _focusNode = FocusNode();
   Timer? _movementTimer;
+  Timer? _animationTimer;
 
   Offset _player = const Offset(0.5, 0.5);
   ControlMode _controlMode = ControlMode.arrows;
   bool _showControlChoice = true;
   Offset _heldDirection = Offset.zero;
   Offset _joystickVector = Offset.zero;
+  int _animationFrame = 0;
+  int _facingRow = 2; // 0 right, 1 left, 2 down, 3 up.
 
   // Roughly normal Undertale-like walking speed.
   // Movement is applied by a fixed 60-ish FPS timer, not by gesture frequency.
@@ -60,6 +63,16 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
     _loadControlMode();
     _movementTimer = Timer.periodic(_movementInterval, (_) {
       _tickMovement();
+    });
+    _animationTimer = Timer.periodic(const Duration(milliseconds: 110), (_) {
+      if (!mounted) return;
+      if (_heldDirection == Offset.zero) {
+        if (_animationFrame != 0) {
+          setState(() => _animationFrame = 0);
+        }
+        return;
+      }
+      setState(() => _animationFrame = (_animationFrame + 1) % 4);
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
@@ -90,7 +103,17 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
     }
 
     final length = direction.distance;
-    _heldDirection = length > 1 ? direction / length : direction;
+    final normalized = length > 1 ? direction / length : direction;
+    _heldDirection = normalized;
+
+    // The sprite sheet has four cardinal views. For diagonal movement we
+    // choose the dominant axis so the character never points at a diagonal
+    // that does not exist in the artwork.
+    if (normalized.dx.abs() > normalized.dy.abs()) {
+      _facingRow = normalized.dx > 0 ? 0 : 1;
+    } else if (normalized.dy != 0) {
+      _facingRow = normalized.dy > 0 ? 2 : 3;
+    }
   }
 
   void _startButtonMovement(Offset direction) {
@@ -198,6 +221,7 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
   @override
   void dispose() {
     _movementTimer?.cancel();
+    _animationTimer?.cancel();
     _focusNode.dispose();
     super.dispose();
   }
@@ -234,12 +258,23 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
                       -1 + 2 * (0.06 + 0.88 * _player.dx),
                       -1 + 2 * (0.10 + 0.80 * _player.dy),
                     ),
-                    child: SizedBox(
-                      width: 29,
-                      height: 42,
-                      child: Image.asset(
-                        'assets/pipistale_player.png',
-                        filterQuality: FilterQuality.none,
+                    child: ClipRect(
+                      child: SizedBox(
+                        width: 30,
+                        height: 47,
+                        child: Transform.translate(
+                          offset: Offset(
+                            -48.0 * _animationFrame,
+                            -75.0 * _facingRow,
+                          ),
+                          child: Image.asset(
+                            'assets/pipistale_walk_sheet.png',
+                            width: 48.0 * 4,
+                            height: 75.0 * 4,
+                            filterQuality: FilterQuality.none,
+                            isAntiAlias: false,
+                          ),
+                        ),
                       ),
                     ),
                   ),
