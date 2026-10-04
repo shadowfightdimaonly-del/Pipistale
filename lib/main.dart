@@ -114,15 +114,17 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
     }
   }
 
-  static const Map<LogicalKeyboardKey, Offset> _keyboardDirections = {
-    LogicalKeyboardKey.arrowLeft: Offset(-1, 0),
-    LogicalKeyboardKey.keyA: Offset(-1, 0),
-    LogicalKeyboardKey.arrowRight: Offset(1, 0),
-    LogicalKeyboardKey.keyD: Offset(1, 0),
-    LogicalKeyboardKey.arrowUp: Offset(0, -1),
-    LogicalKeyboardKey.keyW: Offset(0, -1),
-    LogicalKeyboardKey.arrowDown: Offset(0, 1),
-    LogicalKeyboardKey.keyS: Offset(0, 1),
+  // This must not be const because LogicalKeyboardKey instances do not
+  // have primitive equality, which Dart requires for const map keys.
+  static final Map<LogicalKeyboardKey, Offset> _keyboardDirections = {
+    LogicalKeyboardKey.arrowLeft: const Offset(-1, 0),
+    LogicalKeyboardKey.keyA: const Offset(-1, 0),
+    LogicalKeyboardKey.arrowRight: const Offset(1, 0),
+    LogicalKeyboardKey.keyD: const Offset(1, 0),
+    LogicalKeyboardKey.arrowUp: const Offset(0, -1),
+    LogicalKeyboardKey.keyW: const Offset(0, -1),
+    LogicalKeyboardKey.arrowDown: const Offset(0, 1),
+    LogicalKeyboardKey.keyS: const Offset(0, 1),
   };
 
   Future<void> _loadControlMode() async {
