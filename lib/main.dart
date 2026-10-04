@@ -262,19 +262,24 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
                       child: SizedBox(
                         width: 48,
                         height: 75,
-                        child: Transform.translate(
-                          offset: Offset(
-                            -48.0 * _animationFrame,
-                            -75.0 * _facingRow,
-                          ),
-                          child: Image.asset(
-                            'assets/pipistale_walk_sheet.png',
-                            width: 192,
-                            height: 300,
-                            fit: BoxFit.none,
-                            alignment: Alignment.topLeft,
-                            filterQuality: FilterQuality.none,
-                            isAntiAlias: false,
+                        child: OverflowBox(
+                          minWidth: 192,
+                          maxWidth: 192,
+                          minHeight: 300,
+                          maxHeight: 300,
+                          alignment: Alignment.topLeft,
+                          child: Transform.translate(
+                            offset: Offset(
+                              -48.0 * _animationFrame,
+                              -75.0 * _facingRow,
+                            ),
+                            child: Image.asset(
+                              'assets/pipistale_walk_sheet.png',
+                              width: 192,
+                              height: 300,
+                              filterQuality: FilterQuality.none,
+                              isAntiAlias: false,
+                            ),
                           ),
                         ),
                       ),
