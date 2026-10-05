@@ -137,8 +137,6 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
     }
   }
 
-  // This must not be const because LogicalKeyboardKey instances do not
-  // have primitive equality, which Dart requires for const map keys.
   static final Map<LogicalKeyboardKey, Offset> _keyboardDirections = {
     LogicalKeyboardKey.arrowLeft: const Offset(-1, 0),
     LogicalKeyboardKey.keyA: const Offset(-1, 0),
@@ -261,19 +259,19 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
                     child: SizedBox(
                       width: 48,
                       height: 75,
-                      child: ClipRect(
-                        child: Align(
-                          alignment: Alignment(
-                            -1.0 + (2.0 * _animationFrame / 3.0),
-                            -1.0 + (2.0 * _facingRow / 3.0),
-                          ),
-                          child: Image.asset(
-                            'assets/pipistale_walk_sheet.png',
-                            width: 192,
-                            height: 300,
-                            filterQuality: FilterQuality.none,
-                            isAntiAlias: false,
-                          ),
+                      child: FittedBox(
+                        fit: BoxFit.none,
+                        alignment: Alignment(
+                          -1.0 + (2.0 * _animationFrame / 3.0),
+                          -1.0 + (2.0 * _facingRow / 3.0),
+                        ),
+                        clipBehavior: Clip.hardEdge,
+                        child: Image.asset(
+                          'assets/pipistale_walk_sheet.png',
+                          width: 192,
+                          height: 300,
+                          filterQuality: FilterQuality.none,
+                          isAntiAlias: false,
                         ),
                       ),
                     ),
