@@ -76,8 +76,8 @@ class _SpriteSheetPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final source = Rect.fromLTWH(
-      frame.clamp(0, 3) * 48.0,
-      row.clamp(0, 3) * 75.0,
+      frame.clamp(0, 3).toDouble() * 48.0,
+      row.clamp(0, 3).toDouble() * 75.0,
       48.0,
       75.0,
     );
