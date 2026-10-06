@@ -1,5 +1,4 @@
 import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -75,11 +74,15 @@ class _SpriteSheetPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // The source sheet in the repository is 96x150: four 24px columns and
+    // four rows whose boundaries are 0, 38, 75, 113 and 150 pixels.
+    const rowStarts = <double>[0, 38, 75, 113];
+    const rowHeights = <double>[38, 37, 38, 37];
     final source = Rect.fromLTWH(
-      frame.clamp(0, 3).toDouble() * 48.0,
-      row.clamp(0, 3).toDouble() * 75.0,
-      48.0,
-      75.0,
+      frame.clamp(0, 3) * 24.0,
+      rowStarts[row.clamp(0, 3)],
+      24.0,
+      rowHeights[row.clamp(0, 3)],
     );
     final destination = Offset.zero & size;
     final paint = Paint()..filterQuality = FilterQuality.none;
