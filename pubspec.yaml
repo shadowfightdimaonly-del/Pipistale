@@ -20,4 +20,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/pipistale_player.png
-    - assets/pipistale_walk_sheet.png
+    - assets/Pipistale_walk_sheet.png
