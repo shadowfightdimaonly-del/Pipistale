@@ -3,15 +3,14 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'sprite_sheet_widget.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setPreferredOrientations(const [
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
-  ]).then((_) {
-    runApp(const PipistaleApp());
-  });
+  ]).then((_) => runApp(const PipistaleApp()));
 }
 
 enum ControlMode { arrows, joystick }
@@ -51,49 +50,37 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
   Offset _heldDirection = Offset.zero;
   Offset _joystickVector = Offset.zero;
   int _animationFrame = 0;
-  int _facingRow = 2; // 0 right, 1 left, 2 down, 3 up.
+  int _facingRow = 2;
 
-  // Roughly normal Undertale-like walking speed.
-  // Movement is applied by a fixed 60-ish FPS timer, not by gesture frequency.
   static const double _speedPerSecond = 0.24;
 
   @override
   void initState() {
     super.initState();
     _loadControlMode();
-    _movementTimer = Timer.periodic(_movementInterval, (_) {
-      _tickMovement();
-    });
+    _movementTimer = Timer.periodic(_movementInterval, (_) => _tickMovement());
     _animationTimer = Timer.periodic(const Duration(milliseconds: 110), (_) {
       if (!mounted) return;
       if (_heldDirection == Offset.zero) {
-        if (_animationFrame != 0) {
-          setState(() => _animationFrame = 0);
-        }
+        if (_animationFrame != 0) setState(() => _animationFrame = 0);
         return;
       }
       setState(() => _animationFrame = (_animationFrame + 1) % 4);
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusNode.requestFocus();
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _focusNode.requestFocus());
   }
 
   void _tickMovement() {
     final direction = _heldDirection;
     if (direction == Offset.zero || !mounted) return;
-
     final length = direction.distance;
     final normalized = length > 1 ? direction / length : direction;
     final delta = _speedPerSecond * (_movementInterval.inMicroseconds / 1000000);
     final next = Offset(
-      (_player.dx + normalized.dx * delta).clamp(0.06, 0.94),
-      (_player.dy + normalized.dy * delta).clamp(0.10, 0.90),
+      (_player.dx + normalized.dx * delta).clamp(0.06, 0.94).toDouble(),
+      (_player.dy + normalized.dy * delta).clamp(0.10, 0.90).toDouble(),
     );
-
-    if (next != _player) {
-      setState(() => _player = next);
-    }
+    if (next != _player) setState(() => _player = next);
   }
 
   void _setHeldDirection(Offset direction) {
@@ -101,14 +88,9 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
       _heldDirection = Offset.zero;
       return;
     }
-
     final length = direction.distance;
     final normalized = length > 1 ? direction / length : direction;
     _heldDirection = normalized;
-
-    // The sprite sheet has four cardinal views. For diagonal movement we
-    // choose the dominant axis so the character never points at a diagonal
-    // that does not exist in the artwork.
     if (normalized.dx.abs() > normalized.dy.abs()) {
       _facingRow = normalized.dx > 0 ? 0 : 1;
     } else if (normalized.dy != 0) {
@@ -116,20 +98,15 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
     }
   }
 
-  void _startButtonMovement(Offset direction) {
-    _setHeldDirection(direction);
-  }
+  void _startButtonMovement(Offset direction) => _setHeldDirection(direction);
 
   void _stopButtonMovement() {
-    if (_controlMode == ControlMode.arrows) {
-      _setHeldDirection(Offset.zero);
-    }
+    if (_controlMode == ControlMode.arrows) _setHeldDirection(Offset.zero);
   }
 
   void _moveKeyboard(LogicalKeyboardKey key, bool pressed) {
     final current = _keyboardDirections[key] ?? Offset.zero;
     if (current == Offset.zero) return;
-
     if (pressed) {
       _setHeldDirection(current);
     } else if (_heldDirection == current) {
@@ -165,10 +142,7 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
 
   Future<void> _setControlMode(ControlMode mode) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _controlKey,
-      mode == ControlMode.joystick ? 'joystick' : 'arrows',
-    );
+    await prefs.setString(_controlKey, mode == ControlMode.joystick ? 'joystick' : 'arrows');
     _setHeldDirection(Offset.zero);
     _joystickVector = Offset.zero;
     if (!mounted) return;
@@ -246,35 +220,12 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
               },
               child: Stack(
                 children: [
-                  Positioned.fill(
-                    child: CustomPaint(
-                      painter: _RoomPainter(player: _player),
-                    ),
-                  ),
-                  Align(
-                    alignment: Alignment(
-                      -1 + 2 * (0.06 + 0.88 * _player.dx),
-                      -1 + 2 * (0.10 + 0.80 * _player.dy),
-                    ),
-                    child: SizedBox(
-                      width: 48,
-                      height: 75,
-                      child: FittedBox(
-                        fit: BoxFit.none,
-                        alignment: Alignment(
-                          -1.0 + (2.0 * _animationFrame / 3.0),
-                          -1.0 + (2.0 * _facingRow / 3.0),
-                        ),
-                        clipBehavior: Clip.hardEdge,
-                        child: Image.asset(
-                          'assets/pipistale_walk_sheet.png',
-                          width: 192,
-                          height: 300,
-                          filterQuality: FilterQuality.none,
-                          isAntiAlias: false,
-                        ),
-                      ),
-                    ),
+                  Positioned.fill(child: CustomPaint(painter: _RoomPainter(player: _player))),
+                  PipistaleSprite(
+                    x: _player.dx,
+                    y: _player.dy,
+                    frame: _animationFrame,
+                    row: _facingRow,
                   ),
                   if (!_showControlChoice)
                     Positioned.fill(
@@ -317,10 +268,7 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
                                 children: [
                                   const Text(
                                     'Как управлять?',
-                                    style: TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                                   ),
                                   const SizedBox(height: 18),
                                   Row(
@@ -330,18 +278,14 @@ class _PrototypeScreenState extends State<PrototypeScreen> {
                                         icon: Icons.control_camera_outlined,
                                         title: 'Стрелочки',
                                         subtitle: '8 направлений',
-                                        onPressed: () => _setControlMode(
-                                          ControlMode.arrows,
-                                        ),
+                                        onPressed: () => _setControlMode(ControlMode.arrows),
                                       ),
                                       const SizedBox(width: 16),
                                       _ControlChoiceButton(
                                         icon: Icons.gamepad_outlined,
                                         title: 'Джойстик',
                                         subtitle: 'Круговое управление',
-                                        onPressed: () => _setControlMode(
-                                          ControlMode.joystick,
-                                        ),
+                                        onPressed: () => _setControlMode(ControlMode.joystick),
                                       ),
                                     ],
                                   ),
@@ -369,7 +313,6 @@ class _ControlChoiceButton extends StatelessWidget {
     required this.subtitle,
     required this.onPressed,
   });
-
   final IconData icon;
   final String title;
   final String subtitle;
@@ -388,10 +331,7 @@ class _ControlChoiceButton extends StatelessWidget {
             Icon(icon, size: 34),
             const SizedBox(height: 8),
             Text(title),
-            Text(
-              subtitle,
-              style: const TextStyle(fontSize: 11, color: Colors.white60),
-            ),
+            Text(subtitle, style: const TextStyle(fontSize: 11, color: Colors.white60)),
           ],
         ),
       ),
@@ -400,11 +340,7 @@ class _ControlChoiceButton extends StatelessWidget {
 }
 
 class _ArrowControls extends StatelessWidget {
-  const _ArrowControls({
-    required this.onMoveStart,
-    required this.onMoveEnd,
-  });
-
+  const _ArrowControls({required this.onMoveStart, required this.onMoveEnd});
   final void Function(Offset) onMoveStart;
   final VoidCallback onMoveEnd;
 
@@ -444,7 +380,6 @@ class _ArrowButton extends StatelessWidget {
     required this.onMoveStart,
     required this.onMoveEnd,
   });
-
   final double left;
   final double top;
   final IconData icon;
@@ -477,11 +412,7 @@ class _ArrowButton extends StatelessWidget {
 }
 
 class _JoystickControl extends StatefulWidget {
-  const _JoystickControl({
-    required this.onChanged,
-    required this.onReleased,
-  });
-
+  const _JoystickControl({required this.onChanged, required this.onReleased});
   final void Function(Offset) onChanged;
   final VoidCallback onReleased;
 
@@ -496,9 +427,7 @@ class _JoystickControlState extends State<_JoystickControl> {
     final center = Offset(size.width / 2, size.height / 2);
     var delta = local - center;
     final maxRadius = size.width / 2 - 24;
-    if (delta.distance > maxRadius) {
-      delta = Offset.fromDirection(delta.direction, maxRadius);
-    }
+    if (delta.distance > maxRadius) delta = Offset.fromDirection(delta.direction, maxRadius);
     final normalized = maxRadius == 0 ? Offset.zero : delta / maxRadius;
     setState(() => _knob = delta);
     widget.onChanged(normalized);
@@ -511,12 +440,8 @@ class _JoystickControlState extends State<_JoystickControl> {
       child: Padding(
         padding: const EdgeInsets.only(left: 28, bottom: 28),
         child: GestureDetector(
-          onPanStart: (details) {
-            _update(details.localPosition, const Size(170, 170));
-          },
-          onPanUpdate: (details) {
-            _update(details.localPosition, const Size(170, 170));
-          },
+          onPanStart: (details) => _update(details.localPosition, const Size(170, 170)),
+          onPanUpdate: (details) => _update(details.localPosition, const Size(170, 170)),
           onPanEnd: (_) {
             setState(() => _knob = Offset.zero);
             widget.onReleased();
@@ -528,9 +453,7 @@ class _JoystickControlState extends State<_JoystickControl> {
           child: SizedBox(
             width: 170,
             height: 170,
-            child: CustomPaint(
-              painter: _JoystickPainter(knob: _knob),
-            ),
+            child: CustomPaint(painter: _JoystickPainter(knob: _knob)),
           ),
         ),
       ),
@@ -540,7 +463,6 @@ class _JoystickControlState extends State<_JoystickControl> {
 
 class _JoystickPainter extends CustomPainter {
   const _JoystickPainter({required this.knob});
-
   final Offset knob;
 
   @override
@@ -552,21 +474,17 @@ class _JoystickPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
     final knobPaint = Paint()..color = Colors.white.withOpacity(0.5);
-
     canvas.drawCircle(center, size.width / 2 - 4, base);
     canvas.drawCircle(center, size.width / 2 - 4, outline);
     canvas.drawCircle(center + knob, 32, knobPaint);
   }
 
   @override
-  bool shouldRepaint(covariant _JoystickPainter oldDelegate) {
-    return oldDelegate.knob != knob;
-  }
+  bool shouldRepaint(covariant _JoystickPainter oldDelegate) => oldDelegate.knob != knob;
 }
 
 class _RoomPainter extends CustomPainter {
   const _RoomPainter({required this.player});
-
   final Offset player;
 
   @override
@@ -577,33 +495,21 @@ class _RoomPainter extends CustomPainter {
       size.width * 0.88,
       size.height * 0.80,
     );
-
     final roomPaint = Paint()..color = const Color(0xFF101010);
     final wallPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
       ..strokeWidth = 4;
-
     canvas.drawRect(room, roomPaint);
     canvas.drawRect(room, wallPaint);
-
-    final playerPosition = Offset(
-      room.left + room.width * player.dx,
-      room.top + room.height * player.dy,
-    );
 
     final textPainter = TextPainter(
       text: const TextSpan(
         text: 'Pipistale • прототип комнаты',
-        style: TextStyle(
-          color: Colors.white54,
-          fontSize: 12,
-          fontFamily: 'monospace',
-        ),
+        style: TextStyle(color: Colors.white54, fontSize: 12, fontFamily: 'monospace'),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-
     textPainter.paint(
       canvas,
       Offset(
@@ -614,7 +520,5 @@ class _RoomPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _RoomPainter oldDelegate) {
-    return oldDelegate.player != player;
-  }
+  bool shouldRepaint(covariant _RoomPainter oldDelegate) => oldDelegate.player != player;
 }
