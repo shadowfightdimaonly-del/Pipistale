@@ -7,6 +7,8 @@ workflows:
     scripts:
       - name: Get Flutter packages
         script: flutter pub get
+      - name: Apply sprite-sheet renderer patch
+        script: python3 tooling/patch_sprite_renderer.py
       - name: Build Android APK
         script: flutter build apk --release
     artifacts:
