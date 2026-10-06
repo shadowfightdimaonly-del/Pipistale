@@ -24,7 +24,7 @@ class _PipistaleSpriteState extends State<PipistaleSprite> {
   late final Future<ui.Image> _imageFuture = _loadImage();
 
   Future<ui.Image> _loadImage() async {
-    final data = await rootBundle.load('assets/pipistale_walk_sheet.png');
+    final data = await rootBundle.load('assets/Pipistale_walk_sheet.png');
     final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
     final frame = await codec.getNextFrame();
     codec.dispose();
@@ -74,15 +74,13 @@ class _SpriteSheetPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // The source sheet in the repository is 96x150: four 24px columns and
-    // four rows whose boundaries are 0, 38, 75, 113 and 150 pixels.
-    const rowStarts = <double>[0, 38, 75, 113];
-    const rowHeights = <double>[38, 37, 38, 37];
+    const frameWidth = 48.0;
+    const frameHeight = 75.0;
     final source = Rect.fromLTWH(
-      frame.clamp(0, 3) * 24.0,
-      rowStarts[row.clamp(0, 3)],
-      24.0,
-      rowHeights[row.clamp(0, 3)],
+      frame.clamp(0, 3) * frameWidth,
+      row.clamp(0, 3) * frameHeight,
+      frameWidth,
+      frameHeight,
     );
     final destination = Offset.zero & size;
     final paint = Paint()..filterQuality = FilterQuality.none;
